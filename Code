@@ -1,0 +1,64 @@
+import cv2
+import numpy as np
+import os
+import base64
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+
+# Function to generate a random encryption key
+def generate_key():
+    return os.urandom(16)
+
+# Function to encrypt a message
+def encrypt_message(message, key):
+    message_bytes = message.encode('utf-8')
+
+    padder = padding.PKCS7(128).padder()
+    padded_message = padder.update(message_bytes) + padder.finalize()
+
+    iv = os.urandom(16)
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+
+    encrypted_message = encryptor.update(padded_message) + encryptor.finalize()
+    encrypted_data = base64.b64encode(iv + encrypted_message).decode('utf-8')
+    
+    return encrypted_data
+
+# Function to hide encrypted message in an image using LSB
+def hide_message(image_path, message, key):
+    img = cv2.imread(image_path)
+    if img is None:
+        print("Error: Image not found!")
+        return
+
+    encrypted_message = encrypt_message(message, key)
+    binary_message = ''.join(format(ord(char), '08b') for char in encrypted_message) + '1111111111111110'  # End marker
+
+    data_index = 0
+    total_pixels = img.shape[0] * img.shape[1] * 3
+
+    if len(binary_message) > total_pixels:
+        print("Error: Message too large to hide in the image.")
+        return
+
+    for row in img:
+        for pixel in row:
+            for i in range(3):
+                if data_index < len(binary_message):
+                    pixel[i] = pixel[i] & 254 | int(binary_message[data_index])
+                    data_index += 1
+                else:
+                    break
+
+    cv2.imwrite("stego_image.png", img)
+    print("Message hidden in 'stego_image.png'")
+    print("Encryption Key (Save this to decrypt later!):", key.hex())
+
+# Example usage
+if __name__ == "__main__":
+    image_path = "mypic.jpg"  # Replace with the correct image path
+    secret_message = input("Enter your secret message: ")
+    encryption_key = generate_key()
+    hide_message(image_path, secret_message, encryption_key)
