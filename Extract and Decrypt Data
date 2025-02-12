@@ -1,0 +1,47 @@
+def decrypt_message(encrypted_data, key):
+    encrypted_data = base64.b64decode(encrypted_data)
+    iv = encrypted_data[:16]
+    encrypted_message = encrypted_data[16:]
+
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+
+    decrypted_padded_message = decryptor.update(encrypted_message) + decryptor.finalize()
+
+    unpadder = padding.PKCS7(128).unpadder()
+    decrypted_message = unpadder.update(decrypted_padded_message) + unpadder.finalize()
+
+    return decrypted_message.decode('utf-8')
+
+# Function to extract the hidden message
+def extract_message(image_path, key):
+    img = cv2.imread(image_path)
+    if img is None:
+        print("Error: Image not found!")
+        return
+
+    binary_message = ""
+    for row in img:
+        for pixel in row:
+            for i in range(3):
+                binary_message += str(pixel[i] & 1)
+    
+    binary_chars = [binary_message[i:i+8] for i in range(0, len(binary_message), 8)]
+    
+    extracted_message = ""
+    for binary_char in binary_chars:
+        if binary_char == '11111110':  # Stop marker
+            break
+        extracted_message += chr(int(binary_char, 2))
+
+    try:
+        decrypted_message = decrypt_message(extracted_message, key)
+        print("Decrypted Message:", decrypted_message)
+    except Exception as e:
+        print("Decryption failed: Invalid key or corrupted data.")
+
+# Example usage
+if __name__ == "__main__":
+    key_hex = input("Enter the encryption key for decryption: ")
+    key = bytes.fromhex(key_hex)
+    extract_message("stego_image.png", key)
